@@ -1,73 +1,128 @@
-export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+const SYSTEM = `You are a shopping assistant that finds REAL product pages on Amazon and Walmart.
 
-  const { query } = req.body;
-  if (!query?.trim()) return res.status(400).json({ error: 'No query provided' });
+Given a user query (possibly with typos or vague descriptions):
 
-  const SYSTEM = `You are a shopping assistant that interprets product search queries and returns structured results.
+STEP 1 — Interpret the query. Fix typos, clarify vague terms. Examples:
+  "leathrmn" → "Leatherman Multi-Tool"
+  "knee things for work" → "Knee Pads"
+  "that foldy knife tool" → "Multi-Tool Pocket Knife"
 
-Given a user's query (which may contain typos, vague descriptions, or brain fog phrasing), you must:
-1. Interpret the actual product they want
-2. Return 4 real Amazon product URLs and 4 real Walmart product URLs
+STEP 2 — Use web_search to find REAL product URLs:
+  - Search: "amazon.com [clean product name]" — extract amazon.com/dp/ URLs
+  - Search: "walmart.com [clean product name]" — extract walmart.com/ip/ URLs
+  Do 2-4 searches to get enough real product links.
 
-Return ONLY raw JSON — no markdown, no backticks, no explanation whatsoever.
-
-Required format:
+STEP 3 — Return ONLY raw JSON, no markdown, no backticks, no explanation:
 {
   "rawTerm": "exactly what the user typed",
-  "cleanTerm": "Clean Specific Product Name in Title Case",
-  "urlTerm": "clean+url+encoded+search+term",
+  "cleanTerm": "Clean Product Name in Title Case",
+  "urlTerm": "url+encoded+search+term",
   "amazon": [
-    { "title": "Brand + Model + Key Feature (concise)", "url": "https://www.amazon.com/dp/ASIN_HERE" },
+    { "title": "Brand Model Key Feature (under 65 chars)", "url": "https://www.amazon.com/dp/ASIN" },
     { "title": "...", "url": "..." },
     { "title": "...", "url": "..." },
     { "title": "...", "url": "..." }
   ],
   "walmart": [
-    { "title": "Brand + Model + Key Feature (concise)", "url": "https://www.walmart.com/ip/Product-Slug/ITEM_ID" },
+    { "title": "Brand Model Key Feature (under 65 chars)", "url": "https://www.walmart.com/ip/slug/ITEMID" },
     { "title": "...", "url": "..." },
     { "title": "...", "url": "..." },
     { "title": "...", "url": "..." }
   ]
 }
 
-Rules:
-- For Amazon: use real ASINs you know (10-char codes like B09MSMWMRH). If unsure of a specific ASIN, use https://www.amazon.com/s?k=Brand+Model+specific+product instead.
-- For Walmart: use real item IDs you know (walmart.com/ip/Slug/1234567890). If unsure, use https://www.walmart.com/search?q=Brand+Model+specific+product instead.
-- Titles must be short — max 60 characters, cut off with "..." if needed.
-- Always return exactly 4 items per store.
-- Never return placeholder or fake URLs.`;
+STRICT RULES:
+- Amazon URLs MUST contain /dp/ — if you can't find a real one, use https://www.amazon.com/s?k=Brand+Model
+- Walmart URLs MUST contain /ip/ — if you can't find a real one, use https://www.walmart.com/search?q=Brand+Model  
+- Return exactly 4 products per store
+- No duplicate products
+- Titles must be specific (include brand + model when possible)`;
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+
+  // ── Auth check ──────────────────────────────────────────────────────────────
+  const appPass = process.env.APP_PASS;
+  if (appPass) {
+    const provided = req.headers['x-app-pass'];
+    if (!provided || provided !== appPass) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+  }
+
+  const { query } = req.body;
+  if (!query?.trim()) return res.status(400).json({ error: 'No query provided' });
+
+  // ── Claude call helper ───────────────────────────────────────────────────────
+  const callClaude = (messages) => fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': process.env.ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: SYSTEM,
+      tools: [{ type: 'web_search_20250305', name: 'web_search' }],
+      messages,
+    }),
+  }).then(r => r.json());
+
+  // ── Tool loop ────────────────────────────────────────────────────────────────
+  let messages = [{ role: 'user', content: String(query).trim() }];
 
   try {
-    const apiRes = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1000,
-        system: SYSTEM,
-        messages: [{ role: 'user', content: String(query).trim() }],
-      }),
-    });
+    for (let i = 0; i < 12; i++) {
+      const data = await callClaude(messages);
 
-    const data = await apiRes.json();
-    if (data.error) return res.status(502).json({ error: data.error.message });
+      if (data.error) return res.status(502).json({ error: data.error.message });
 
-    const raw = (data.content || []).map(b => b.text || '').join('');
-    const cleaned = raw.replace(/```json|```/gi, '').trim();
-    const parsed = JSON.parse(cleaned);
+      const textBlocks   = (data.content || []).filter(b => b.type === 'text');
+      const toolUseBlocks = (data.content || []).filter(b => b.type === 'tool_use');
 
-    // Validate shape
-    if (!parsed.cleanTerm || !Array.isArray(parsed.amazon) || !Array.isArray(parsed.walmart)) {
-      return res.status(502).json({ error: 'Unexpected response shape from model' });
+      // Done — parse final JSON response
+      if (data.stop_reason === 'end_turn' || (textBlocks.length && !toolUseBlocks.length)) {
+        const raw    = textBlocks.map(b => b.text).join('');
+        const clean  = raw.replace(/```json|```/gi, '').trim();
+        const parsed = JSON.parse(clean);
+
+        if (!parsed.cleanTerm || !Array.isArray(parsed.amazon) || !Array.isArray(parsed.walmart)) {
+          return res.status(502).json({ error: 'Unexpected response structure from model.' });
+        }
+
+        res.setHeader('Cache-Control', 'no-store');
+        return res.json(parsed);
+      }
+
+      // Tool use — add assistant turn + empty tool results, continue loop
+      if (data.stop_reason === 'tool_use' && toolUseBlocks.length) {
+        messages.push({ role: 'assistant', content: data.content });
+
+        const toolResults = toolUseBlocks.map(b => ({
+          type: 'tool_result',
+          tool_use_id: b.id,
+          content: b.input?.query
+            ? `Searched for: ${b.input.query}`
+            : 'Search executed.',
+        }));
+
+        messages.push({ role: 'user', content: toolResults });
+        continue;
+      }
+
+      // Unexpected stop — return what we have if any text exists
+      if (textBlocks.length) {
+        const raw   = textBlocks.map(b => b.text).join('');
+        const clean = raw.replace(/```json|```/gi, '').trim();
+        return res.json(JSON.parse(clean));
+      }
+
+      break;
     }
 
-    res.setHeader('Cache-Control', 'no-store');
-    return res.json(parsed);
+    return res.status(502).json({ error: 'Model did not return a result after search loop.' });
   } catch (err) {
     return res.status(500).json({ error: err.message || 'Unknown server error' });
   }
