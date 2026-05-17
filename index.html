@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ShopBot — Amazon & Walmart Assistant</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:      #0c0c0c;
+    --card:    #141414;
+    --card2:   #1a1a1a;
+    --border:  #252525;
+    --border2: #2e2e2e;
+    --amazon:  #ff9900;
+    --walmart: #4a9ede;
+    --header:  #ff8c00;
+    --text:    #e2e2e2;
+    --dim:     #555;
+    --dim2:    #777;
+    --green:   #4caf7d;
+    --red:     #e05555;
+    --font:    'IBM Plex Mono', monospace;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 13px;
+    min-height: 100vh;
+    padding-bottom: 48px;
+  }
+
+  /* ═══════════════════════════════════
+     HEADER
+  ═══════════════════════════════════ */
+  header {
+    background: #0e0e0e;
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px 12px;
+    text-align: center;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header h1 {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--header);
+    letter-spacing: 4px;
+    text-transform: uppercase;
+  }
+  header p {
+    font-size: 10px;
+    color: var(--dim);
+    margin-top: 3px;
+    letter-spacing: 1px;
+  }
+
+  /* ═══════════════════════════════════
+     SEARCH SCREEN
+  ═══════════════════════════════════ */
+  #search-screen {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 58px);
+    padding: 24px 16px;
+  }
+  .search-hero {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    margin-bottom: 20px;
+  }
+  .search-box {
+    width: 100%;
+    max-width: 480px;
+    background: var(--card);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+  .search-box:focus-within {
+    border-color: var(--amazon);
+  }
+  .search-box textarea {
+    display: block;
+    width: 100%;
+    background: transparent;
+    border: none;
+    outline: none;
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    font-weight: 500;
+    padding: 16px;
+    resize: none;
+    min-height: 80px;
+    line-height: 1.5;
+    caret-color: var(--amazon);
+  }
+  .search-box textarea::placeholder { color: var(--dim); }
+  .search-box textarea::-webkit-scrollbar { display: none; }
+  .search-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px 10px;
+    border-top: 1px solid var(--border);
+  }
+  .search-hint {
+    font-size: 10px;
+    color: var(--dim);
+  }
+  .search-btn {
+    background: var(--amazon);
+    color: #000;
+    border: none;
+    border-radius: 5px;
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 9px 18px;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.1s;
+  }
+  .search-btn:hover { opacity: 0.88; }
+  .search-btn:active { transform: scale(0.97); }
+  .search-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .examples {
+    margin-top: 20px;
+    width: 100%;
+    max-width: 480px;
+  }
+  .examples-label {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .example-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .pill {
+    padding: 5px 11px;
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    font-size: 11px;
+    color: var(--dim2);
+    cursor: pointer;
+    transition: all 0.15s;
+    background: var(--card);
+  }
+  .pill:hover { border-color: var(--dim2); color: var(--text); }
+
+  /* ═══════════════════════════════════
+     LOADING
+  ═══════════════════════════════════ */
+  #loading-screen {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 58px);
+    padding: 24px;
+    text-align: center;
+    gap: 16px;
+  }
+  .spinner {
+    width: 36px;
+    height: 36px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--amazon);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text {
+    font-size: 11px;
+    color: var(--dim2);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .loading-query {
+    font-size: 13px;
+    color: var(--dim);
+    font-style: italic;
+    max-width: 280px;
+  }
+
+  /* ═══════════════════════════════════
+     RESULTS SCREEN
+  ═══════════════════════════════════ */
+  #results-screen {
+    display: none;
+    padding: 0 0 20px;
+  }
+
+  /* ── SEARCH BANNER ── */
+  .search-banner {
+    margin: 12px 12px 0;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    position: relative;
+  }
+  .banner-label {
+    font-size: 10px;
+    color: var(--dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .banner-raw {
+    font-size: 11px;
+    color: var(--dim2);
+    font-style: italic;
+    margin-bottom: 3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .banner-clean {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--amazon);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .new-search-btn {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    padding: 6px 11px;
+    border: 1px solid var(--border2);
+    border-radius: 5px;
+    background: var(--card2);
+    color: var(--dim2);
+    font-family: var(--font);
+    font-size: 10px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .new-search-btn:hover { border-color: var(--dim2); color: var(--text); }
+
+  /* ── TIP BANNER ── */
+  .tip-banner {
+    margin: 8px 12px 0;
+    border-left: 3px solid var(--walmart);
+    background: rgba(74,158,222,0.06);
+    border-radius: 0 5px 5px 0;
+    padding: 8px 12px;
+    font-size: 10px;
+    color: #6db8e8;
+    line-height: 1.6;
+  }
+  .tip-banner strong { color: var(--walmart); }
+
+  /* ── TABS ── */
+  .tab-row {
+    display: flex;
+    gap: 8px;
+    margin: 12px 12px 0;
+  }
+  .tab-btn {
+    flex: 1;
+    padding: 11px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--card);
+    color: var(--dim);
+    font-family: var(--font);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.18s;
+    letter-spacing: 0.5px;
+  }
+  .tab-btn.amz-active {
+    background: rgba(255,153,0,0.1);
+    border-color: var(--amazon);
+    color: var(--amazon);
+  }
+  .tab-btn.wmt-active {
+    background: rgba(74,158,222,0.1);
+    border-color: var(--walmart);
+    color: var(--walmart);
+  }
+
+  /* ── PANELS ── */
+  .panel { display: none; padding: 14px 12px 0; }
+  .panel.visible { display: block; }
+
+  /* ── SECTION LABEL ── */
+  .sec-label {
+    font-size: 10px;
+    letter-spacing: 2.5px;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 10px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ── PRODUCT BUTTONS ── */
+  .prod-list {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    margin-bottom: 18px;
+  }
+  .prod-btn {
+    display: block;
+    width: 100%;
+    padding: 11px 38px 11px 13px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: left;
+    text-decoration: none;
+    line-height: 1.45;
+    transition: filter 0.15s, transform 0.1s;
+    position: relative;
+  }
+  .prod-btn:active { transform: scale(0.985); }
+  .prod-btn .arrow {
+    position: absolute;
+    right: 11px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 13px;
+    opacity: 0.45;
+  }
+  .prod-btn.amz-prod {
+    background: rgba(255,153,0,0.07);
+    border-color: rgba(255,153,0,0.28);
+    color: #ffd080;
+  }
+  .prod-btn.amz-prod:hover { filter: brightness(1.18); }
+  .prod-btn.wmt-prod {
+    background: rgba(74,158,222,0.07);
+    border-color: rgba(74,158,222,0.28);
+    color: #92d3ff;
+  }
+  .prod-btn.wmt-prod:hover { filter: brightness(1.18); }
+
+  /* ── FILTER CARD ── */
+  .filter-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 13px;
+  }
+  .filter-card .sec-label { margin-bottom: 11px; }
+  .filter-pills {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 13px;
+  }
+  .f-pill {
+    padding: 6px 11px;
+    border-radius: 20px;
+    border: 1px solid var(--border2);
+    background: var(--card2);
+    color: var(--dim2);
+    font-family: var(--font);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.15s;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .f-pill:hover { border-color: #444; color: #aaa; }
+  .f-pill.on-amz { background: rgba(255,153,0,0.14); border-color: var(--amazon); color: var(--amazon); }
+  .f-pill.on-wmt { background: rgba(74,158,222,0.14); border-color: var(--walmart); color: var(--walmart); }
+
+  /* ── URL PREVIEW ── */
+  .url-preview {
+    background: #080808;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 9px 11px;
+    margin-bottom: 10px;
+    font-size: 10px;
+    color: #444;
+    word-break: break-all;
+    line-height: 1.5;
+    max-height: 58px;
+    overflow: hidden;
+  }
+  .url-preview span { color: #666; }
+
+  .action-row {
+    display: flex;
+    gap: 7px;
+  }
+  .act-btn {
+    flex: 1;
+    padding: 10px 7px;
+    border-radius: 6px;
+    border: 1px solid;
+    font-family: var(--font);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: filter 0.15s;
+    letter-spacing: 0.3px;
+  }
+  .act-btn:active { filter: brightness(0.82); }
+  .open-amz { background: rgba(255,153,0,0.13); border-color: var(--amazon); color: var(--amazon); }
+  .open-wmt { background: rgba(74,158,222,0.13); border-color: var(--walmart); color: var(--walmart); }
+  .copy-btn { background: var(--card2); border-color: var(--border2); color: var(--dim2); }
+  .copy-btn.copied { border-color: var(--green); color: var(--green); }
+
+  /* ═══════════════════════════════════
+     ERROR TOAST
+  ═══════════════════════════════════ */
+  #err-toast {
+    display: none;
+    margin: 12px 12px 0;
+    background: rgba(224,85,85,0.1);
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    padding: 10px 13px;
+    font-size: 11px;
+    color: #f08080;
+    line-height: 1.5;
+  }
+
+  /* ═══════════════════════════════════
+     SCROLLBAR
+  ═══════════════════════════════════ */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ──── HEADER ──── -->
+<header>
+  <h1>⚡ ShopBot</h1>
+  <p>Amazon &amp; Walmart Shopping Assistant</p>
+</header>
+
+<!-- ──── SEARCH SCREEN ──── -->
+<div id="search-screen">
+  <div class="search-hero">🛒 What are you looking for?</div>
+
+  <div class="search-box">
+    <textarea id="q" placeholder="Type anything — typos, vague descriptions, all good..." rows="3" autocomplete="off" spellcheck="false"></textarea>
+    <div class="search-footer">
+      <span class="search-hint">↩ Enter or tap Search</span>
+      <button class="search-btn" id="search-btn" onclick="doSearch()">SEARCH</button>
+    </div>
+  </div>
+
+  <div class="examples">
+    <div class="examples-label">Try these</div>
+    <div class="example-pills">
+      <button class="pill" onclick="fillExample(this)">leathrmn</button>
+      <button class="pill" onclick="fillExample(this)">knee things for work</button>
+      <button class="pill" onclick="fillExample(this)">socket set thingys</button>
+      <button class="pill" onclick="fillExample(this)">cordless drill</button>
+      <button class="pill" onclick="fillExample(this)">that foldy knife tool</button>
+      <button class="pill" onclick="fillExample(this)">seat cushon</button>
+    </div>
+  </div>
+</div>
+
+<!-- ──── LOADING SCREEN ──── -->
+<div id="loading-screen">
+  <div class="spinner"></div>
+  <div class="loading-text">Finding Products</div>
+  <div class="loading-query" id="loading-q"></div>
+</div>
+
+<!-- ──── RESULTS SCREEN ──── -->
+<div id="results-screen">
+
+  <!-- Error toast -->
+  <div id="err-toast"></div>
+
+  <!-- Search interpretation banner -->
+  <div class="search-banner">
+    <div class="banner-label">🔍 You searched for</div>
+    <div class="banner-raw" id="res-raw"></div>
+    <div class="banner-clean" id="res-clean"></div>
+    <button class="new-search-btn" onclick="resetToSearch()">↩ New Search</button>
+  </div>
+
+  <!-- Walmart app tip -->
+  <div class="tip-banner">
+    <strong>📱 Walmart App Tip:</strong> For Walmart links to open the app, save this page to your phone and open it in Safari or Chrome — not inside Claude.
+  </div>
+
+  <!-- Store tabs -->
+  <div class="tab-row">
+    <button class="tab-btn amz-active" id="tab-amz" onclick="switchTab('amazon')">📦 Amazon</button>
+    <button class="tab-btn" id="tab-wmt" onclick="switchTab('walmart')">🔵 Walmart</button>
+  </div>
+
+  <!-- ── AMAZON PANEL ── -->
+  <div class="panel visible" id="panel-amazon">
+    <div class="sec-label">Direct Product Pages</div>
+    <div class="prod-list" id="amz-products"></div>
+
+    <div class="filter-card">
+      <div class="sec-label">Build Your Search</div>
+      <div class="filter-pills" id="amz-filters">
+        <button class="f-pill" data-g="feature" data-p="prime"    onclick="toggle(this,'amazon')">🚀 Prime Eligible</button>
+        <button class="f-pill" data-g="feature" data-p="stars"    onclick="toggle(this,'amazon')">⭐ 4 Stars &amp; Up</button>
+        <button class="f-pill" data-g="sort"    data-p="bestsell" onclick="toggle(this,'amazon')">🏆 Best Sellers</button>
+        <button class="f-pill" data-g="sort"    data-p="price_lo" onclick="toggle(this,'amazon')">💰 Price Low→High</button>
+        <button class="f-pill" data-g="price"   data-p="budget"   onclick="toggle(this,'amazon')">💲 Budget &lt;$60</button>
+        <button class="f-pill" data-g="price"   data-p="premium"  onclick="toggle(this,'amazon')">💎 Premium $100+</button>
+      </div>
+      <div class="url-preview"><span id="amz-url-text"></span></div>
+      <div class="action-row">
+        <button class="act-btn open-amz" onclick="openUrl('amazon')">↗ Open Amazon</button>
+        <button class="act-btn copy-btn" id="amz-copy" onclick="copyUrl('amazon')">📋 Copy Link</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── WALMART PANEL ── -->
+  <div class="panel" id="panel-walmart">
+    <div class="sec-label">Direct Product Pages</div>
+    <div class="prod-list" id="wmt-products"></div>
+
+    <div class="filter-card">
+      <div class="sec-label">Build Your Search</div>
+      <div class="filter-pills" id="wmt-filters">
+        <button class="f-pill" data-g="avail" data-p="fast"     onclick="toggle(this,'walmart')">⚡ Get It Fast</button>
+        <button class="f-pill" data-g="avail" data-p="instore"  onclick="toggle(this,'walmart')">🏪 In-Store Only</button>
+        <button class="f-pill" data-g="avail" data-p="pickup"   onclick="toggle(this,'walmart')">📦 Pickup Today</button>
+        <button class="f-pill" data-g="avail" data-p="twoday"   onclick="toggle(this,'walmart')">🚀 2-Day Delivery</button>
+        <button class="f-pill" data-g="sort"  data-p="toprated" onclick="toggle(this,'walmart')">⭐ Sort: Top Rated</button>
+        <button class="f-pill" data-g="sort"  data-p="bestsell" onclick="toggle(this,'walmart')">🏆 Sort: Best Seller</button>
+        <button class="f-pill" data-g="sort"  data-p="price_lo" onclick="toggle(this,'walmart')">💰 Sort: Price Low→High</button>
+        <button class="f-pill" data-g="price" data-p="budget"   onclick="toggle(this,'walmart')">💲 Budget &lt;$60</button>
+        <button class="f-pill" data-g="price" data-p="premium"  onclick="toggle(this,'walmart')">💎 Premium $100+</button>
+      </div>
+      <div class="url-preview"><span id="wmt-url-text"></span></div>
+      <div class="action-row">
+        <button class="act-btn open-wmt" onclick="openUrl('walmart')">↗ Open Walmart</button>
+        <button class="act-btn copy-btn" id="wmt-copy" onclick="copyUrl('walmart')">📋 Copy Link</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /results-screen -->
+
+<script>
+  /* ═══════════════════════════════════════════════
+     STATE
+  ═══════════════════════════════════════════════ */
+  let urlTerm   = '';
+  const BASE    = { amazon: '', walmart: '' };
+  const active  = { amazon: {}, walmart: {} };
+
+  const AMZ_PARAMS = {
+    prime:    '&rh=p_85%3A2470955011',
+    stars:    '&rh=p_72%3A1248957011',
+    bestsell: '&s=exact-aware-popularity-rank',
+    price_lo: '&s=price-asc-rank',
+    budget:   '&low-price=1&high-price=60',
+    premium:  '&low-price=100'
+  };
+  const WMT_PARAMS = {
+    fast:     '&facet=fulfillment_speed%3ATomorrow',
+    instore:  '&facet=fulfillment_method%3AIn-Store',
+    pickup:   '&facet=fulfillment_method%3APickup',
+    twoday:   '&facet=fulfillment_speed%3A2-Day',
+    toprated: '&sort=rating_high',
+    bestsell: '&sort=best_seller',
+    price_lo: '&sort=price_low',
+    budget:   '&min_price=1&max_price=60',
+    premium:  '&min_price=100'
+  };
+  const ALL_PARAMS = { amazon: AMZ_PARAMS, walmart: WMT_PARAMS };
+
+  /* ═══════════════════════════════════════════════
+     UI HELPERS
+  ═══════════════════════════════════════════════ */
+  const $  = id => document.getElementById(id);
+  const ss = (id, html) => { $(id).innerHTML = html; };
+
+  function show(id)  { $(id).style.display = 'flex'; }
+  function hide(id)  { $(id).style.display = 'none'; }
+  function showB(id) { $(id).style.display = 'block'; }
+
+  function resetToSearch() {
+    hide('loading-screen');
+    hide('results-screen');
+    showB('search-screen');
+    $('search-screen').style.display = 'flex';
+    $('q').value = '';
+    $('q').focus();
+    // Reset active filters
+    active.amazon = {}; active.walmart = {};
+    document.querySelectorAll('.f-pill').forEach(p => p.classList.remove('on-amz','on-wmt'));
+  }
+
+  /* ═══════════════════════════════════════════════
+     SEARCH
+  ═══════════════════════════════════════════════ */
+  $('q').addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSearch(); }
+  });
+
+  function fillExample(btn) {
+    $('q').value = btn.textContent.trim();
+    $('q').focus();
+  }
+
+  async function doSearch() {
+    const q = $('q').value.trim();
+    if (!q) return;
+
+    // Switch to loading
+    $('search-screen').style.display = 'none';
+    hide('results-screen');
+    $('err-toast').style.display = 'none';
+    $('loading-q').textContent = `"${q}"`;
+    show('loading-screen');
+    $('search-btn').disabled = true;
+
+    try {
+      const res  = await fetch('/api/proxy', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ query: q })
+      });
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      renderResults(data);
+    } catch (err) {
+      hide('loading-screen');
+      showB('search-screen');
+      $('search-screen').style.display = 'flex';
+      $('err-toast').textContent = `⚠ ${err.message || 'Something went wrong. Try again.'}`;
+      $('err-toast').style.display = 'block';
+    } finally {
+      $('search-btn').disabled = false;
+    }
+  }
+
+  /* ═══════════════════════════════════════════════
+     RENDER RESULTS
+  ═══════════════════════════════════════════════ */
+  function renderResults(data) {
+    // Banner
+    $('res-raw').textContent   = `"${data.rawTerm}"`;
+    $('res-clean').textContent = data.cleanTerm;
+
+    // Build base URLs
+    urlTerm       = data.urlTerm || encodeURIComponent(data.cleanTerm).replace(/%20/g,'+');
+    BASE.amazon   = `https://www.amazon.com/s?k=${urlTerm}`;
+    BASE.walmart  = `https://www.walmart.com/search?q=${urlTerm}`;
+
+    // Reset filters
+    active.amazon = {}; active.walmart = {};
+    document.querySelectorAll('.f-pill').forEach(p => p.classList.remove('on-amz','on-wmt'));
+
+    // Products — Amazon
+    $('amz-products').innerHTML = (data.amazon || []).slice(0,4).map(p =>
+      `<a class="prod-btn amz-prod" href="${esc(p.url)}" target="_blank" rel="noopener">
+        ${esc(p.title)}<span class="arrow">↗</span>
+      </a>`
+    ).join('');
+
+    // Products — Walmart
+    $('wmt-products').innerHTML = (data.walmart || []).slice(0,4).map(p =>
+      `<button class="prod-btn wmt-prod" onclick="wmtOpen('${esc(p.url)}')">
+        ${esc(p.title)}<span class="arrow">↗</span>
+      </button>`
+    ).join('');
+
+    // URL previews
+    updatePreview('amazon');
+    updatePreview('walmart');
+
+    // Switch to results
+    hide('loading-screen');
+    showB('results-screen');
+    switchTab('amazon');
+    window.scrollTo(0, 0);
+  }
+
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  /* ═══════════════════════════════════════════════
+     TABS
+  ═══════════════════════════════════════════════ */
+  function switchTab(store) {
+    $('panel-amazon').classList.remove('visible');
+    $('panel-walmart').classList.remove('visible');
+    $('panel-' + store).classList.add('visible');
+    $('tab-amz').className = 'tab-btn' + (store === 'amazon'  ? ' amz-active' : '');
+    $('tab-wmt').className = 'tab-btn' + (store === 'walmart' ? ' wmt-active' : '');
+  }
+
+  /* ═══════════════════════════════════════════════
+     FILTERS
+  ═══════════════════════════════════════════════ */
+  function toggle(btn, store) {
+    const group    = btn.dataset.g;
+    const param    = btn.dataset.p;
+    const onClass  = store === 'amazon' ? 'on-amz' : 'on-wmt';
+    const filterId = store === 'amazon' ? 'amz-filters' : 'wmt-filters';
+    const container = $(filterId);
+
+    // Deactivate others in group
+    container.querySelectorAll(`[data-g="${group}"]`).forEach(b => {
+      if (b !== btn) { b.classList.remove(onClass); delete active[store][group]; }
+    });
+
+    if (btn.classList.contains(onClass)) {
+      btn.classList.remove(onClass);
+      delete active[store][group];
+    } else {
+      btn.classList.add(onClass);
+      active[store][group] = ALL_PARAMS[store][param];
+    }
+    updatePreview(store);
+  }
+
+  function buildUrl(store) {
+    let url = BASE[store] || '';
+    Object.values(active[store]).forEach(p => { url += p; });
+    return url;
+  }
+
+  function updatePreview(store) {
+    const el = $(store === 'amazon' ? 'amz-url-text' : 'wmt-url-text');
+    if (el) el.textContent = buildUrl(store);
+  }
+
+  function openUrl(store) {
+    const url = buildUrl(store);
+    if (url) window.open(url, '_blank');
+  }
+
+  function copyUrl(store) {
+    const url   = buildUrl(store);
+    const btnId = store === 'amazon' ? 'amz-copy' : 'wmt-copy';
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      const btn = $(btnId);
+      const orig = btn.textContent;
+      btn.textContent = '✅ Copied!';
+      btn.classList.add('copied');
+      setTimeout(() => { btn.textContent = orig; btn.classList.remove('copied'); }, 2000);
+    });
+  }
+
+  /* ═══════════════════════════════════════════════
+     WALMART DEEP LINK
+  ═══════════════════════════════════════════════ */
+  function wmtOpen(webUrl) {
+    const appUrl = webUrl.replace('https://www.walmart.com','walmart://');
+    const t0     = Date.now();
+    window.location = appUrl;
+    setTimeout(() => {
+      if (Date.now() - t0 < 1600) window.open(webUrl, '_blank');
+    }, 1200);
+  }
+</script>
+</body>
+</html>
